@@ -34,8 +34,10 @@ export class SsePingService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.stopPingInterval();
+    this.closeAllConnections();
     this.logger.log('SSE ping service stopped');
   }
+  
 
   /**
    * Configure the ping service
@@ -135,4 +137,39 @@ export class SsePingService implements OnModuleInit, OnModuleDestroy {
       }
     }
   }
+
+  /**
+   * Close all active SSE connections
+   */
+  private closeAllConnections() {
+    if (this.activeConnections.size === 0) {
+      return;
+    }
+  
+    this.logger.log(`Closing ${this.activeConnections.size} active SSE connections`);
+    
+    for (const [sessionId, { res, transport }] of this.activeConnections.entries()) {
+      try {
+        // Send a final message to inform the client
+        if (!res.closed && res.writable) {
+          res.write(': connection-closing\n\n');
+        }
+        
+        // Close the response stream
+        res.end();
+        
+        // Clean up the transport if it has a close method
+        if (transport && typeof transport.close === 'function') {
+          transport.close();
+        }
+        
+        this.logger.debug(`Closed SSE connection: ${sessionId}`);
+      } catch (error) {
+        this.logger.error(`Error closing connection ${sessionId}:`, error);
+      }
+    }
+    
+    // Clear the connections map
+    this.activeConnections.clear();
+  } 
 }
